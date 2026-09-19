@@ -13,6 +13,7 @@ export function getEnvVar(key: string, nextKey: string): string {
   return '';
 }
 
-export const SUPABASE_URL = getEnvVar('VITE_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL');
-export const SUPABASE_ANON_KEY = getEnvVar('VITE_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY');
+export const SUPABASE_URL = getEnvVar('VITE_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL') || 'https://placeholder.supabase.co';
+export const SUPABASE_ANON_KEY = getEnvVar('VITE_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') || 'placeholder-anon-key';
 export const GEMINI_API_KEY = getEnvVar('GEMINI_API_KEY', 'NEXT_PUBLIC_GEMINI_API_KEY');
+
