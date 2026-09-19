@@ -1,0 +1,51 @@
+
+project_id = "rrbjcmqxkhfzdexfbsfu"
+
+[functions.reset-admin-password]
+verify_jwt = true
+
+[functions.fetch-pmu-data]
+verify_jwt = false
+
+[functions.fetch-pmu-results]
+verify_jwt = false
+
+[functions.ai-analysis]
+verify_jwt = false
+
+[functions.generate-betting-tips]
+verify_jwt = false
+
+[functions.subscribe-email]
+verify_jwt = false
+
+[functions.odds-ai-analysis]
+verify_jwt = false
+
+[functions.list-users]
+verify_jwt = false
+
+[functions.delete-user]
+verify_jwt = false
+
+[functions.manage-user-role]
+verify_jwt = false
+
+[functions.send-approval-email]
+verify_jwt = false
+
+[functions.validate-ai-password]
+verify_jwt = false
+
+[functions.validate-turf-password]
+verify_jwt = false
+
+[functions.check-email-approval]
+verify_jwt = false
+
+[functions.setup-admin]
+verify_jwt = false
+
+[functions.racing-expert-chat]
+verify_jwt = false
+
