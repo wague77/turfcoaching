@@ -5,24 +5,42 @@ export async function POST(req: Request) {
   try {
     const { snapshots, arrivee, date, reunion, course, customPrompt } = await req.json();
 
-    const systemInstruction = `Tu es un Algorithme Expert d'Analyse Prédictive des Cotes Hippiques pour Turf Coaching System (v8.0).
-Tu analyses l'évolution des cotes, les baisses soudaines (smart money), les favoris solides et les tocards dangereux.
-Réponds avec un rapport synthétique, structuré, clair et illustré d'emojis.`;
+    const systemInstruction = `Tu es l'Algorithme Expert d'Analyse Prédictive & Mouvement des Cotes Hippiques pour Turf Coaching System (v8.0).
+Tu décodes avec précision les baisses de cotes brusques ("chutes de cote", "smart money", "argent des initiés"), les hausses d'incertitude et la dérive des favoris fragile.
+Ta mission est d'éclairer les parieurs sur l'argent réel placé sur chaque cheval.
+
+Règles de présentation :
+- Structure synthétique, ultra-lisible, dynamique et rigoureuse avec émojis.
+- Inclure des données chiffrées (pourcentages de baisse, cotes directes vs probabilités).`;
 
     const prompt = customPrompt || `
-Analyse les données d'évolution des cotes ci-dessous :
-Date: ${date || 'Aujourd\'hui'} | Réunion: ${reunion || 'R1'} | Course: ${course || 'C1'}
-Arrivée constatée / cible : ${JSON.stringify(arrivee || {})}
-Instantanés des cotes : ${JSON.stringify(snapshots || []).slice(0, 3000)}
+Analyse experte de l'évolution dynamique des cotes PMU :
+📅 **Date** : ${date || 'Aujourd\'hui'} | 📍 **Réunion/Course** : ${reunion || 'R1'} - ${course || 'C1'}
+🎯 **Arrivée constatée / cible** : ${JSON.stringify(arrivee || {})}
+📊 **Variations et Snapshots des cotes (3000 max)** :
+${JSON.stringify(snapshots || [], null, 2).slice(0, 3500)}
 
-Fais un rapport détaillé :
-1. **Synthèse des Variations de Cotes** (chutes de cotes et argent intelligent)
-2. **Favoris & Bases Solides**
-3. **Outsiders & Tocards à surveiller**
-4. **Pronostic & Conseils de Jeux**
+Fournis le rapport d'analyse de cotes structuré comme suit :
+
+### 📊 1. SYNTHÈSE DES CHUTES DE COTES & ARGENT INTELLIGENT (Smart Money)
+- Identifie les chevaux dont la cote s'est effondrée (signe de confiance des écuries/parieurs professionnels).
+- Signale les favoris dont la cote monte (méfiance du marché).
+
+### 🏆 2. FAVORIS SOLIDES VS FAVORIS FRAGILES
+- Distingue les favoris soutenus par le marché des favoris surcotés.
+
+### 💣 3. OUTSIDERS & TOCARDS À CHUTE DE COTE MARQUÉE
+- Repère les outsiders qui reçoivent des mises anormalement élevées en fin de cote.
+
+### 🎯 4. PRONOSTIC FINAL & STRATÉGIE PARIES SUR COTES
+- **Conseils de jeu** (Jeu Simple Gagnant/Placé, Couplé Gagnant, Zecouillon/2sur4).
+- **Alerte Risque & Indice de Volatilité des Cotes** (Faible / Modéré / Élevé).
 `;
 
-    const text = await generateGeminiContent(prompt, systemInstruction);
+    const text = await generateGeminiContent(prompt, systemInstruction, 0, {
+      temperature: 0.6,
+      maxTokens: 3500,
+    });
 
     return NextResponse.json({ text, result: text, analysis: text });
   } catch (error: any) {
@@ -33,3 +51,4 @@ Fais un rapport détaillé :
     );
   }
 }
+
