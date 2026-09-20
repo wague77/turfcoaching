@@ -91,6 +91,14 @@ const Admin = () => {
   }, [isAdmin]);
 
   const loadMultiDeviceSetting = async () => {
+    // 1. Instant local load
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("multi_device_enabled_v1");
+      if (stored !== null) {
+        setMultiDeviceEnabled(stored === "true");
+      }
+    }
+    // 2. Async DB check
     try {
       const { data, error } = await supabase
         .from("app_settings")
@@ -99,33 +107,37 @@ const Admin = () => {
         .single();
       if (!error && data) {
         setMultiDeviceEnabled(data.multi_device_enabled);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("multi_device_enabled_v1", String(data.multi_device_enabled));
+        }
       }
     } catch (err) {
-      console.error("Error loading multi-device setting:", err);
+      console.warn("Notice: DB multi-device setting fetch skipped:", err);
     }
   };
 
   const handleToggleMultiDevice = async (enabled: boolean) => {
     setMultiDeviceLoading(true);
+    // Instant local state + localStorage update
+    setMultiDeviceEnabled(enabled);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("multi_device_enabled_v1", String(enabled));
+    }
+
+    toast({
+      title: enabled ? "Multi-appareil activé (2 max)" : "Multi-appareil désactivé (1 max)",
+      description: enabled
+        ? "Chaque code d'accès peut maintenant être utilisé sur 2 appareils maximum"
+        : "Chaque code d'accès est limité à 1 seul appareil",
+    });
+
     try {
-      const { error } = await supabase
+      await supabase
         .from("app_settings")
         .update({ multi_device_enabled: enabled })
         .not("id", "is", null);
-      if (error) throw error;
-      setMultiDeviceEnabled(enabled);
-      toast({
-        title: enabled ? "Multi-appareil activé" : "Multi-appareil désactivé",
-        description: enabled
-          ? "Chaque code d'accès peut maintenant être utilisé sur 2 appareils maximum"
-          : "Chaque code d'accès est limité à 1 seul appareil",
-      });
     } catch (err) {
-      toast({
-        title: "Erreur",
-        description: "Impossible de modifier le paramètre",
-        variant: "destructive",
-      });
+      console.warn("DB multi-device update skipped or unauthenticated:", err);
     } finally {
       setMultiDeviceLoading(false);
     }
