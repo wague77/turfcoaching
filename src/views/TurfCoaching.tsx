@@ -270,7 +270,7 @@ export default function TurfCoaching() {
         
         <main className="container mx-auto px-4 py-6">
           <div className="mb-6 flex items-center gap-4">
-            <Link to="/">
+            <Link href="/">
               <Button variant="outline" size="sm" className="gap-2">
                 <ArrowLeft className="w-4 h-4" />
                 Retour
@@ -357,7 +357,7 @@ export default function TurfCoaching() {
       
       <main className="container mx-auto px-4 py-6">
         <div className="mb-6 flex items-center gap-4">
-          <Link to="/">
+          <Link href="/">
             <Button variant="outline" size="sm" className="gap-2">
               <ArrowLeft className="w-4 h-4" />
               Retour

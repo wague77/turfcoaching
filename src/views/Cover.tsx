@@ -1,7 +1,6 @@
 
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import coverHero from "@/assets/cover-hero.jpg";
 
 interface CoverProps {
   onNext: () => void;
@@ -43,7 +42,7 @@ export default function Cover({ onNext }: CoverProps) {
           {/* Hero image */}
           <div className="relative">
             <img
-              src={coverHero}
+              src="/cover-hero.jpg"
               alt="Cheval de course au galop"
               width={1024}
               height={1280}

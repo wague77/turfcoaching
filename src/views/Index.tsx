@@ -125,7 +125,7 @@ const Index = () => {
       
       {/* Quick access to WAGUE-TURF */}
       <div className="container mx-auto px-4 pt-4">
-        <Link to="/wague-turf" className="block group">
+        <Link href="/wague-turf" className="block group">
           <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-amber-600/20 via-yellow-500/15 to-amber-600/20 border border-amber-500/40 p-[2px] hover:border-amber-400/70 transition-all duration-500 hover:shadow-[0_0_25px_rgba(245,158,11,0.3)]">
             <div className="relative flex items-center justify-center gap-3 rounded-[10px] bg-background/90 backdrop-blur-sm px-6 py-4">
               <Trophy className="w-6 h-6 text-amber-400 animate-pulse" />
