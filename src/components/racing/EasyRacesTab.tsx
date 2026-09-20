@@ -1,12 +1,11 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Loader2, RefreshCw, Trophy, Target, CheckCircle, Bookmark, BookmarkCheck, CalendarIcon } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { Loader2, RefreshCw, Trophy, Target, CheckCircle, Bookmark, BookmarkCheck, CalendarIcon, Download } from 'lucide-react';
+import { fetchPMUData } from '@/lib/pmu-api';
 import { analyzeRace } from '@/lib/racing-logic';
 import { Discipline } from '@/types/racing';
 import { toast } from 'sonner';
@@ -19,9 +18,10 @@ import { ArriveeInputDialog } from './ArriveeInputDialog';
 
 interface EasyRacesTabProps {
   arrivee?: number[];
+  onSelectRace?: (race: EasyRaceResult) => void;
 }
 
-const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
+const EasyRacesTab = ({ arrivee = [], onSelectRace }: EasyRacesTabProps) => {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, status: '' });
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -63,15 +63,12 @@ const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
   const fetchAndAnalyzeRace = async (
     date: string, 
     reunion: number, 
-    course: number, 
-    accessCode: string
+    course: number
   ): Promise<EasyRaceResult | null> => {
     try {
-      const { data, error } = await supabase.functions.invoke('fetch-pmu-data', {
-        body: { date, reunion, course, accessCode }
-      });
+      const data = await fetchPMUData(date, reunion, course);
       
-      if (error || !data?.success || !data?.horses?.length) {
+      if (!data || !data.success || !data.horses || data.horses.length < 4) {
         return null;
       }
       
@@ -100,7 +97,7 @@ const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
         raceInfo: {
           reunionNumber: reunion,
           raceNumber: course,
-          hippodrome: data.hippodrome,
+          hippodrome: data.hippodrome || `Réunion ${reunion}`,
           discipline
         },
         top4: analysis.horses.slice(0, 4),
@@ -114,12 +111,6 @@ const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
 
   // Main fetch function
   const fetchAllEasyRaces = async () => {
-    const accessCode = sessionStorage.getItem('racing_access_code');
-    if (!accessCode) {
-      toast.error('Code d\'accès requis pour récupérer les données PMU');
-      return;
-    }
-
     setLoading(true);
     setProgress({ current: 0, total: 0, status: 'Recherche des réunions...' });
     
@@ -144,7 +135,7 @@ const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
             status: `R${reunion} C${course} - Analyse en cours...` 
           });
           
-          const result = await fetchAndAnalyzeRace(date, reunion, course, accessCode);
+          const result = await fetchAndAnalyzeRace(date, reunion, course);
           
           if (result) {
             reunionHasRaces = true;
@@ -155,21 +146,21 @@ const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
           }
           
           // Small delay to avoid rate limiting
-          await new Promise(r => setTimeout(r, 200));
+          await new Promise(r => setTimeout(r, 100));
         }
       }
       
       setProgress({ current: totalScanned, total: totalScanned, status: 'Terminé!' });
-      setEasyRaces(foundEasyRaces); // This saves to localStorage too
+      setEasyRaces(foundEasyRaces);
       
       if (foundEasyRaces.length === 0) {
-        toast.info('Aucune course facile trouvée aujourd\'hui');
+        toast.info('Aucune course facile trouvée pour cette date');
       } else {
-        toast.success(`${foundEasyRaces.length} course(s) facile(s) trouvée(s)`);
+        toast.success(`${foundEasyRaces.length} course(s) facile(s) trouvée(s) !`);
       }
     } catch (error) {
       console.error('Erreur lors de la récupération des courses:', error);
-      toast.error('Erreur lors de la récupération des données');
+      toast.error('Erreur lors de la récupération des données PMU');
     } finally {
       setLoading(false);
     }
@@ -177,14 +168,12 @@ const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
 
   // Get color for position (with arrivée overlay)
   const getPositionColor = (index: number, horseNumero: number): string => {
-    // Check if horse is in arrivée first
     if (arrivee.length > 0 && isInArrivee(horseNumero, arrivee)) {
       const pos = getArriveePosition(horseNumero, arrivee);
       const style = getArriveeStyle(pos);
       return `${style.background} ${style.border} ${style.text}`;
     }
     
-    // Default position colors
     switch (index) {
       case 0: return 'bg-amber-500/20 border-amber-500 text-amber-400';
       case 1: return 'bg-slate-400/20 border-slate-400 text-slate-300';
@@ -214,7 +203,7 @@ const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
                 TOP 4 des Courses Faciles
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Analyse automatique de toutes les réunions
+                Analyse automatique de toutes les réunions PMU
               </p>
             </div>
             <Button 
@@ -230,7 +219,7 @@ const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
               ) : (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  Analyser
+                  Analyser les réunions
                 </>
               )}
             </Button>
@@ -294,8 +283,8 @@ const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
               Aucune course facile
             </h3>
             <p className="text-sm text-muted-foreground text-center max-w-md">
-              Cliquez sur "Analyser toutes les réunions" pour scanner les courses du jour 
-              et trouver celles avec un indice de difficulté facile.
+              Cliquez sur "Analyser les réunions" pour scanner les courses du jour 
+              et trouver les courses avec un indice de difficulté facile.
             </p>
           </CardContent>
         </Card>
@@ -318,6 +307,17 @@ const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
                     </Badge>
                   </div>
                   <div className="flex items-center gap-2">
+                    {onSelectRace && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 text-xs"
+                        onClick={() => onSelectRace(race)}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Importer
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -430,4 +430,3 @@ const EasyRacesTab = ({ arrivee = [] }: EasyRacesTabProps) => {
 };
 
 export default EasyRacesTab;
-
