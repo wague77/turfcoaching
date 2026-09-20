@@ -58,63 +58,64 @@ const BettingTipsWidget = ({ horses, analysisResult, onSave, arrivee = [], onSav
     setIsLoading(true);
     setError(null);
     try {
-      const sessionToken = getSessionToken();
-      const deviceId = getDeviceId();
-      
-      const { data, error: invokeError } = await supabase.functions.invoke('generate-betting-tips', {
-        body: { horses, analysisResult, sessionToken, deviceId }
-      });
+      let analysisText = '';
 
-      if (invokeError) {
-        console.error('Edge function error:', invokeError);
-        // Try to get more details from the error
-        let errorDetails = invokeError.message || JSON.stringify(invokeError);
-        if (invokeError.context) {
-          try {
-            const contextBody = await invokeError.context.json?.() || invokeError.context.text?.();
-            if (contextBody) {
-              errorDetails += `\n\nServer response: ${typeof contextBody === 'string' ? contextBody : JSON.stringify(contextBody)}`;
-            }
-          } catch {
-            // Ignore parsing errors
-          }
+      // 1. Primary: Try native Next.js AI API route (/api/ai/wague-ai)
+      try {
+        const resp = await fetch('/api/ai/wague-ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            horses,
+            discipline: 'Trot / Galop / PMU',
+            raceInfo: 'Système de Jeu IA Expert - Paris Hippiques',
+          }),
+        });
+
+        if (resp.ok) {
+          const data = await resp.json();
+          analysisText = data.text || data.response || '';
         }
-        setError({
-          message: 'Erreur de communication avec le serveur',
-          code: invokeError.name || 'INVOKE_ERROR',
-          details: errorDetails,
-        });
-        return;
+      } catch (apiErr) {
+        console.warn('Native AI route error, trying Edge function fallback:', apiErr);
       }
 
-      if (data?.error) {
-        console.error('API error:', data.error);
-        setError({
-          message: data.error,
-          code: data.code || 'API_ERROR',
-          details: data.details || undefined,
-        });
-        return;
+      // 2. Secondary: Try Edge Function if native route did not return text
+      if (!analysisText) {
+        try {
+          const sessionToken = getSessionToken();
+          const deviceId = getDeviceId();
+          const { data, error: invokeError } = await supabase.functions.invoke('generate-betting-tips', {
+            body: { horses, analysisResult, sessionToken, deviceId }
+          });
+          if (!invokeError && data?.success && data?.analysis) {
+            analysisText = data.analysis;
+          }
+        } catch (edgeErr) {
+          console.warn('Edge Function fallback skipped:', edgeErr);
+        }
       }
 
-      if (data?.success && data?.analysis) {
-        setTips(data.analysis);
+      // 3. Tertiary: Fallback client Gemini generation if needed
+      if (!analysisText) {
+        const prompt = `Génère le Système de Jeu IA Expert pour les chevaux suivants : ${JSON.stringify(horses).slice(0, 3000)}`;
+        analysisText = await generateGeminiContent(prompt, "Tu es le Moteur d'IA Avancée Expert Hippique PMU.");
+      }
+
+      if (analysisText) {
+        setTips(analysisText);
         setIsSaved(false);
         setRaceName('');
-        toast.success('Système de jeu généré !');
+        toast.success('Système de jeu IA généré avec succès !');
       } else {
-        setError({
-          message: 'Réponse inattendue du serveur',
-          code: 'UNEXPECTED_RESPONSE',
-          details: JSON.stringify(data),
-        });
+        throw new Error('Impossible de générer le système de jeu IA');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error generating tips:', err);
       const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
       setError({
-        message: 'Erreur lors de la génération des pronostics',
-        code: 'CATCH_ERROR',
+        message: 'Erreur lors de la génération des pronostics IA',
+        code: 'AI_GENERATION_ERROR',
         details: errorMessage,
       });
     } finally {

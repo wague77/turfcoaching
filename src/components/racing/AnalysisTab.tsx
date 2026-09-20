@@ -77,28 +77,57 @@ export function AnalysisTab({ result, discipline, arrivee = [] }: AnalysisTabPro
     
     setIsLoadingAI(true);
     try {
-      const sessionToken = getSessionToken();
-      const deviceId = getDeviceId();
-      
-      const { data, error } = await supabase.functions.invoke('ai-analysis', {
-        body: {
-          horses: result.horses,
-          favorites: result.favorites,
-          difficulty: result.difficulty,
-          difficultyScore: result.difficultyScore,
-          discipline: discipline || 'plat',
-          sessionToken,
-          deviceId
-        }
-      });
+      let analysisText = '';
 
-      if (error) throw error;
-      
-      if (data?.success) {
-        setAiAnalysis(data.analysis);
-        toast.success('Analyse IA générée');
+      // 1. Try native Next.js AI API route
+      try {
+        const resp = await fetch('/api/ai/wague-ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            horses: result.horses,
+            discipline: discipline || 'plat',
+            raceInfo: `Course ${difficulty ? `- Difficulté: ${difficulty}` : ''}`,
+          }),
+        });
+
+        if (resp.ok) {
+          const data = await resp.json();
+          analysisText = data.text || data.response || '';
+        }
+      } catch (apiErr) {
+        console.warn('Native AI API error, trying Edge function fallback:', apiErr);
+      }
+
+      // 2. Edge Function fallback
+      if (!analysisText) {
+        try {
+          const sessionToken = getSessionToken();
+          const deviceId = getDeviceId();
+          const { data, error } = await supabase.functions.invoke('ai-analysis', {
+            body: {
+              horses: result.horses,
+              favorites: result.favorites,
+              difficulty: result.difficulty,
+              difficultyScore: result.difficultyScore,
+              discipline: discipline || 'plat',
+              sessionToken,
+              deviceId
+            }
+          });
+          if (!error && data?.success) {
+            analysisText = data.analysis;
+          }
+        } catch (edgeErr) {
+          console.warn('Edge Function fallback skipped:', edgeErr);
+        }
+      }
+
+      if (analysisText) {
+        setAiAnalysis(analysisText);
+        toast.success('Analyse IA générée avec succès !');
       } else {
-        throw new Error(data?.error || 'Erreur inconnue');
+        throw new Error('Impossible de générer l\'analyse IA');
       }
     } catch (error) {
       console.error('AI Analysis error:', error);
