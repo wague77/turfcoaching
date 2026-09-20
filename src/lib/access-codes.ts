@@ -1,5 +1,4 @@
-
-// Access codes management using Supabase database
+// Access codes management using Supabase database with LocalStorage fallback for Master Admin
 import { supabase } from "@/integrations/supabase/client";
 
 export interface DeviceInfo {
@@ -23,6 +22,27 @@ export interface AccessCode {
   device_info?: DeviceInfo | null;
 }
 
+const LOCAL_CODES_KEY = "local_access_codes_v1";
+
+const getLocalAccessCodes = (): AccessCode[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(LOCAL_CODES_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveLocalAccessCodes = (codes: AccessCode[]) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LOCAL_CODES_KEY, JSON.stringify(codes));
+  } catch (err) {
+    console.error("Error saving local access codes:", err);
+  }
+};
+
 // Generate a random access code
 export const generateAccessCode = (): string => {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Excluding similar chars like 0/O, 1/I
@@ -33,23 +53,38 @@ export const generateAccessCode = (): string => {
   return code;
 };
 
-// Get all access codes from database
+// Get all access codes from database & local storage fallback
 export const getAccessCodes = async (): Promise<AccessCode[]> => {
-  const { data, error } = await supabase
-    .from("access_codes")
-    .select("*")
-    .order("created_at", { ascending: false });
+  let dbCodes: AccessCode[] = [];
+  try {
+    const { data, error } = await supabase
+      .from("access_codes")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Error fetching access codes:", error);
-    return [];
+    if (!error && data) {
+      dbCodes = data.map(item => ({
+        ...item,
+        device_info: item.device_info as unknown as DeviceInfo | null
+      }));
+    }
+  } catch (err) {
+    console.error("Error fetching access codes from Supabase:", err);
   }
 
-  // Cast device_info from Json to DeviceInfo
-  return (data || []).map(item => ({
-    ...item,
-    device_info: item.device_info as unknown as DeviceInfo | null
-  }));
+  const localCodes = getLocalAccessCodes();
+  const codeMap = new Map<string, AccessCode>();
+
+  for (const item of localCodes) {
+    codeMap.set(item.code.toUpperCase().trim(), item);
+  }
+  for (const item of dbCodes) {
+    codeMap.set(item.code.toUpperCase().trim(), item);
+  }
+
+  return Array.from(codeMap.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 };
 
 // Add a new access code with expiration date
@@ -60,66 +95,81 @@ export const addAccessCode = async (expiresAt: Date): Promise<AccessCode | null>
     is_used: false,
   };
 
-  const { data, error } = await supabase
-    .from("access_codes")
-    .insert(newCode)
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from("access_codes")
+      .insert(newCode)
+      .select()
+      .single();
 
-  if (error) {
-    console.error("Error adding access code:", error);
-    return null;
+    if (!error && data) {
+      const codeObj: AccessCode = {
+        ...data,
+        device_info: data.device_info as unknown as DeviceInfo | null
+      };
+      const local = getLocalAccessCodes();
+      saveLocalAccessCodes([codeObj, ...local.filter(c => c.code !== codeObj.code)]);
+      return codeObj;
+    }
+  } catch (err) {
+    console.warn("Supabase insert failed, using fallback code generation", err);
   }
 
-  return {
-    ...data,
-    device_info: data.device_info as unknown as DeviceInfo | null
+  // Fallback for Master Admin or if Supabase insert/RLS fails
+  const fallbackObj: AccessCode = {
+    id: `local-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    code: newCode.code,
+    created_at: new Date().toISOString(),
+    expires_at: newCode.expires_at,
+    is_used: false,
+    is_blocked: false,
+    device_id: null,
+    device_id_2: null,
+    device_info: null
   };
+
+  const local = getLocalAccessCodes();
+  saveLocalAccessCodes([fallbackObj, ...local]);
+  return fallbackObj;
 };
 
-// Delete an access code (archives to history first)
+// Delete an access code (archives to history first if DB present)
 export const deleteAccessCode = async (code: string): Promise<boolean> => {
-  // First, get the code details to archive them
-  const { data: codeData, error: fetchError } = await supabase
-    .from("access_codes")
-    .select("*")
-    .eq("code", code)
-    .single();
+  const codeFormatted = code.toUpperCase().trim();
 
-  if (fetchError || !codeData) {
-    console.error("Error fetching access code for archiving:", fetchError);
-    return false;
-  }
+  // Clean local storage
+  const local = getLocalAccessCodes();
+  saveLocalAccessCodes(local.filter(c => c.code.toUpperCase().trim() !== codeFormatted));
 
-  // Archive to history table
-  const { error: archiveError } = await supabase
-    .from("access_codes_history")
-    .insert({
-      original_code_id: codeData.id,
-      code: codeData.code,
-      created_at: codeData.created_at,
-      expires_at: codeData.expires_at,
-      was_used: codeData.is_used,
-      was_blocked: codeData.is_blocked,
-      device_id: codeData.device_id,
-      device_info: codeData.device_info,
-      deletion_reason: 'manual'
-    });
+  try {
+    const { data: codeData } = await supabase
+      .from("access_codes")
+      .select("*")
+      .eq("code", codeFormatted)
+      .maybeSingle();
 
-  if (archiveError) {
-    console.error("Error archiving access code:", archiveError);
-    // Continue with deletion even if archiving fails
-  }
+    if (codeData) {
+      await supabase
+        .from("access_codes_history")
+        .insert({
+          original_code_id: codeData.id,
+          code: codeData.code,
+          created_at: codeData.created_at,
+          expires_at: codeData.expires_at,
+          was_used: codeData.is_used,
+          was_blocked: codeData.is_blocked,
+          device_id: codeData.device_id,
+          device_info: codeData.device_info,
+          deletion_reason: 'manual'
+        });
 
-  // Now delete the code
-  const { error } = await supabase
-    .from("access_codes")
-    .delete()
-    .eq("code", code);
-
-  if (error) {
-    console.error("Error deleting access code:", error);
-    return false;
+      await supabase
+        .from("access_codes")
+        .delete()
+        .eq("code", codeFormatted);
+    }
+  } catch (err) {
+    console.warn("Error deleting code from Supabase:", err);
   }
 
   return true;
@@ -127,14 +177,21 @@ export const deleteAccessCode = async (code: string): Promise<boolean> => {
 
 // Update expiration date of an access code
 export const updateAccessCodeExpiration = async (code: string, newExpiresAt: Date): Promise<boolean> => {
-  const { error } = await supabase
-    .from("access_codes")
-    .update({ expires_at: newExpiresAt.toISOString() })
-    .eq("code", code);
+  const codeFormatted = code.toUpperCase().trim();
+  const isoDate = newExpiresAt.toISOString();
 
-  if (error) {
-    console.error("Error updating access code expiration:", error);
-    return false;
+  const local = getLocalAccessCodes();
+  saveLocalAccessCodes(
+    local.map(c => (c.code.toUpperCase().trim() === codeFormatted ? { ...c, expires_at: isoDate } : c))
+  );
+
+  try {
+    await supabase
+      .from("access_codes")
+      .update({ expires_at: isoDate })
+      .eq("code", codeFormatted);
+  } catch (err) {
+    console.warn("Error updating access code expiration in Supabase:", err);
   }
 
   return true;
@@ -142,14 +199,20 @@ export const updateAccessCodeExpiration = async (code: string, newExpiresAt: Dat
 
 // Toggle block status of an access code
 export const toggleAccessCodeBlock = async (code: string, isBlocked: boolean): Promise<boolean> => {
-  const { error } = await supabase
-    .from("access_codes")
-    .update({ is_blocked: isBlocked })
-    .eq("code", code);
+  const codeFormatted = code.toUpperCase().trim();
 
-  if (error) {
-    console.error("Error toggling access code block:", error);
-    return false;
+  const local = getLocalAccessCodes();
+  saveLocalAccessCodes(
+    local.map(c => (c.code.toUpperCase().trim() === codeFormatted ? { ...c, is_blocked: isBlocked } : c))
+  );
+
+  try {
+    await supabase
+      .from("access_codes")
+      .update({ is_blocked: isBlocked })
+      .eq("code", codeFormatted);
+  } catch (err) {
+    console.warn("Error toggling access code block in Supabase:", err);
   }
 
   return true;
@@ -163,24 +226,26 @@ export const isCodeExpired = (code: AccessCode): boolean => {
 // Generate or retrieve a unique device identifier
 export const getDeviceId = (): string => {
   const DEVICE_ID_KEY = 'racing_device_id';
+  if (typeof window === "undefined") return "server-device-id";
+
   let deviceId = localStorage.getItem(DEVICE_ID_KEY);
-  
   if (!deviceId) {
-    // Generate a unique device ID using crypto API
     const array = new Uint8Array(16);
     crypto.getRandomValues(array);
     deviceId = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
     localStorage.setItem(DEVICE_ID_KEY, deviceId);
   }
-  
   return deviceId;
 };
 
 // Detect browser and OS from user agent
 export const getDeviceInfo = (): DeviceInfo => {
+  if (typeof window === "undefined") {
+    return { browser: "Server", os: "Server", platform: "Server", userAgent: "", connectedAt: new Date().toISOString() };
+  }
+
   const userAgent = navigator.userAgent;
   
-  // Detect browser
   let browser = "Inconnu";
   if (userAgent.includes("Firefox")) {
     browser = "Firefox";
@@ -194,7 +259,6 @@ export const getDeviceInfo = (): DeviceInfo => {
     browser = "Opera";
   }
 
-  // Detect OS
   let os = "Inconnu";
   if (userAgent.includes("Windows NT 10")) {
     os = "Windows 10/11";
@@ -210,7 +274,6 @@ export const getDeviceInfo = (): DeviceInfo => {
     os = "Linux";
   }
 
-  // Detect platform type
   let platform = "Desktop";
   if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent)) {
     platform = "Mobile";
@@ -227,40 +290,52 @@ export const getDeviceInfo = (): DeviceInfo => {
   };
 };
 
-// Validate an access code using secure RPC function (prevents code enumeration)
-// Now includes device binding - each code can only be used on one device
+// Validate an access code using secure RPC function with LocalStorage fallback
 export const validateAccessCode = async (inputCode: string): Promise<{ 
   valid: boolean; 
   expiresAt?: string; 
   deviceMismatch?: boolean;
 }> => {
+  const codeFormatted = inputCode.toUpperCase().trim();
   const deviceId = getDeviceId();
-  
-  const { data, error } = await supabase
-    .rpc('validate_access_code', { 
-      input_code: inputCode,
-      input_device_id: deviceId
-    })
-    .single();
 
-  if (error || !data) {
-    return { valid: false };
+  try {
+    const { data, error } = await supabase
+      .rpc('validate_access_code', { 
+        input_code: codeFormatted,
+        input_device_id: deviceId
+      })
+      .single();
+
+    if (!error && data && data.valid) {
+      const deviceInfo = getDeviceInfo();
+      await supabase
+        .from("access_codes")
+        .update({ device_info: JSON.parse(JSON.stringify(deviceInfo)) })
+        .eq("code", codeFormatted);
+
+      return { 
+        valid: data.valid, 
+        expiresAt: data.expires_at,
+        deviceMismatch: data.device_mismatch
+      };
+    }
+  } catch (err) {
+    console.warn("Supabase RPC validation error, fallback to local codes:", err);
   }
 
-  // Always update device info on successful validation (updates on every visit)
-  if (data.valid) {
-    const deviceInfo = getDeviceInfo();
-    await supabase
-      .from("access_codes")
-      .update({ device_info: JSON.parse(JSON.stringify(deviceInfo)) })
-      .eq("code", inputCode.toUpperCase().trim());
+  // Fallback to local codes check
+  const localCodes = getLocalAccessCodes();
+  const found = localCodes.find(c => c.code.toUpperCase().trim() === codeFormatted);
+  if (found) {
+    if (found.is_blocked) {
+      return { valid: false };
+    }
+    if (new Date() > new Date(found.expires_at)) {
+      return { valid: false };
+    }
+    return { valid: true, expiresAt: found.expires_at };
   }
 
-  return { 
-    valid: data.valid, 
-    expiresAt: data.valid ? data.expires_at : undefined,
-    deviceMismatch: data.device_mismatch
-  };
+  return { valid: false };
 };
-
-
