@@ -327,7 +327,7 @@ const Admin = () => {
                 Générateur de Codes
               </h1>
               <p className="text-gray-400 text-sm">
-                Connecté: {user.email}
+                Connecté: {user?.email || "Administrateur Master"}
               </p>
             </div>
           </div>
