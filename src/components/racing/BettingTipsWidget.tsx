@@ -68,74 +68,23 @@ const BettingTipsWidget = ({ horses, analysisResult, onSave, arrivee = [], onSav
     setIsLoading(true);
     setError(null);
     try {
-      let analysisText = '';
-
-      // 1. Primary: Try native Next.js AI API route (/api/ai/wague-ai)
-      try {
-        const resp = await fetch('/api/ai/wague-ai', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            horses: targetHorses,
-            discipline: 'Trot / Galop / PMU',
-            raceInfo: 'Système de Jeu IA Expert - Paris Hippiques',
-          }),
-        });
-
-        if (resp.ok) {
-          const data = await resp.json();
-          analysisText = data.text || data.response || '';
-        }
-      } catch (apiErr) {
-        console.warn('Native AI route error, trying Edge function fallback:', apiErr);
-      }
-
-      // 2. Secondary: Try Edge Function if native route did not return text
-      if (!analysisText) {
-        try {
-          const sessionToken = getSessionToken();
-          const deviceId = getDeviceId();
-          const { data, error: invokeError } = await supabase.functions.invoke('generate-betting-tips', {
-            body: { horses: targetHorses, analysisResult, sessionToken, deviceId }
-          });
-          if (!invokeError && data?.success && data?.analysis) {
-            analysisText = data.analysis;
-          }
-        } catch (edgeErr) {
-          console.warn('Edge Function fallback skipped:', edgeErr);
-        }
-      }
-
-      // 3. Tertiary: Fallback client Gemini generation if needed
-      if (!analysisText) {
-        try {
-          const prompt = `Génère le Système de Jeu IA Expert pour les chevaux suivants : ${JSON.stringify(targetHorses).slice(0, 3000)}`;
-          analysisText = await generateGeminiContent(prompt, "Tu es le Moteur d'IA Avancée Expert Hippique PMU.");
-        } catch (geminiErr) {
-          console.warn('Client Gemini generation skipped:', geminiErr);
-        }
-      }
-
-      // 4. Quaternary: Fallback local algorithmic Wague Turf generator
-      if (!analysisText) {
-        const { generateLocalWagueTurfAnalysis } = await import('@/lib/wague-turf-logic');
-        analysisText = generateLocalWagueTurfAnalysis(targetHorses, 'Trot / Galop / PMU', 'Système de Jeu IA Expert');
-      }
+      const { generateLocalWagueTurfAnalysis } = await import('@/lib/wague-turf-logic');
+      const analysisText = generateLocalWagueTurfAnalysis(targetHorses, 'Trot / Galop / PMU', 'Système de Jeu IA Expert');
 
       setTips(analysisText);
       setError(null);
       setIsSaved(false);
       setRaceName('');
-      toast.success('Système de jeu IA généré avec succès !');
+      toast.success('Pronostics Système de Jeu IA générés instantanément !');
     } catch (err: any) {
-      console.warn('Error generating tips, using local algorithmic engine:', err);
+      console.warn('Error generating tips:', err);
       const { generateLocalWagueTurfAnalysis } = await import('@/lib/wague-turf-logic');
       const fallbackText = generateLocalWagueTurfAnalysis(targetHorses, 'Trot / Galop / PMU', 'Système de Jeu IA Expert');
       setTips(fallbackText);
       setError(null);
       setIsSaved(false);
       setRaceName('');
-      toast.success('Système de jeu IA généré avec succès !');
+      toast.success('Pronostics Système de Jeu IA générés instantanément !');
     } finally {
       setIsLoading(false);
     }
