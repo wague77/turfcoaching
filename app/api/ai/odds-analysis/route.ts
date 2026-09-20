@@ -1,9 +1,21 @@
 import { NextResponse } from 'next/server';
 import { generateGeminiContent } from '@/lib/gemini';
+import { generateLocalOddsAnalysis } from '@/lib/wague-turf-logic';
 
 export async function POST(req: Request) {
+  let snapshots: any[] = [];
+  let date = '';
+  let reunion: any = '';
+  let course: any = '';
+
   try {
-    const { snapshots, arrivee, date, reunion, course, customPrompt } = await req.json();
+    const body = await req.json();
+    snapshots = body.snapshots || [];
+    date = body.date || '';
+    reunion = body.reunion || '';
+    course = body.course || '';
+    const arrivee = body.arrivee;
+    const customPrompt = body.customPrompt;
 
     const systemInstruction = `Tu es l'Algorithme Expert d'Analyse Prédictive & Mouvement des Cotes Hippiques pour Turf Coaching System (v8.0).
 Tu décodes avec précision les baisses de cotes brusques ("chutes de cote", "smart money", "argent des initiés"), les hausses d'incertitude et la dérive des favoris fragile.
@@ -44,11 +56,9 @@ Fournis le rapport d'analyse de cotes structuré comme suit :
 
     return NextResponse.json({ text, result: text, analysis: text });
   } catch (error: any) {
-    console.error('Gemini Odds Analysis Route Error:', error);
-    return NextResponse.json(
-      { error: error?.message || 'Erreur lors de l\'analyse des cotes par l\'IA Gemini.' },
-      { status: 500 }
-    );
+    console.warn('Gemini Odds Analysis Route Error (using algorithmic fallback):', error?.message || error);
+    const fallbackText = generateLocalOddsAnalysis(snapshots, date, reunion, course);
+    return NextResponse.json({ text: fallbackText, result: fallbackText, analysis: fallbackText });
   }
 }
 

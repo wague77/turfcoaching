@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
 import { generateGeminiContent } from '@/lib/gemini';
+import { generateLocalWagueTurfAnalysis } from '@/lib/wague-turf-logic';
 
 export async function POST(req: Request) {
+  let horses: any[] = [];
+  let discipline = '';
+  let raceInfo = '';
+  
   try {
-    const { horses, discipline, raceInfo } = await req.json();
+    const body = await req.json();
+    horses = body.horses || [];
+    discipline = body.discipline || '';
+    raceInfo = body.raceInfo || '';
 
     const systemInstruction = `Tu es l'Algorithme Expert & Moteur d'IA Avancée WAGUE-TURF v8.0, leader dans le calcul probabiliste des courses hippiques PMU (Trot, Galop, Haies, Steeple-chase).
 Tu analyses avec une précision chirurgicale les données des chevaux : Musique récente, cote probabilité, ferrage (D4/DP/DA), jockey/driver, régularité et forme du moment.
@@ -49,11 +57,9 @@ Génère une analyse experte complète avec les 5 sections suivantes :
 
     return NextResponse.json({ text, response: text });
   } catch (error: any) {
-    console.error('Wague Turf AI Route Error:', error);
-    return NextResponse.json(
-      { error: error?.message || 'Erreur lors du calcul WAGUE-TURF par l\'IA Gemini.' },
-      { status: 500 }
-    );
+    console.warn('Wague Turf AI Route Error (using algorithmic fallback):', error?.message || error);
+    const fallbackText = generateLocalWagueTurfAnalysis(horses, discipline, raceInfo);
+    return NextResponse.json({ text: fallbackText, response: fallbackText });
   }
 }
 
