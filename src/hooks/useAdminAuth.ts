@@ -12,20 +12,38 @@ export const useAdminAuth = () => {
   const router = useRouter();
 
   useEffect(() => {
+    // Check master admin override token first
+    const checkMasterAdmin = () => {
+      if (typeof window !== "undefined") {
+        const isMaster =
+          sessionStorage.getItem("master_admin_authenticated") === "true" ||
+          localStorage.getItem("master_admin_authenticated") === "true";
+        if (isMaster) {
+          setIsAdmin(true);
+          setIsLoading(false);
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (checkMasterAdmin()) return;
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
 
-        // Defer admin check with setTimeout to prevent deadlock
         if (session?.user) {
           setTimeout(() => {
             checkAdminRole(session.user.id);
           }, 0);
         } else {
-          setIsAdmin(false);
-          setIsLoading(false);
+          if (!checkMasterAdmin()) {
+            setIsAdmin(false);
+            setIsLoading(false);
+          }
         }
       }
     );
@@ -38,7 +56,9 @@ export const useAdminAuth = () => {
       if (session?.user) {
         checkAdminRole(session.user.id);
       } else {
-        setIsLoading(false);
+        if (!checkMasterAdmin()) {
+          setIsLoading(false);
+        }
       }
     });
 
@@ -46,6 +66,14 @@ export const useAdminAuth = () => {
   }, []);
 
   const checkAdminRole = async (userId: string) => {
+    if (typeof window !== "undefined" && (
+      sessionStorage.getItem("master_admin_authenticated") === "true" ||
+      localStorage.getItem("master_admin_authenticated") === "true"
+    )) {
+      setIsAdmin(true);
+      setIsLoading(false);
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from("user_roles")
@@ -63,6 +91,10 @@ export const useAdminAuth = () => {
   };
 
   const signOut = async () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("master_admin_authenticated");
+      localStorage.removeItem("master_admin_authenticated");
+    }
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
