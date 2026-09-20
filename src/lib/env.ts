@@ -1,6 +1,6 @@
 function decodeFallbackKey(): string {
   try {
-    const b64 = "QVEuQWI4Uk42TFQ2ZDBaMW9rRXJJeTdmbWh1QjdnUUl1Ukh6UThrU202di1uLTJXRmtBQlE=";
+    const b64 = "QVEuQWI4Uk42THdDQm5BUExUMlU0emQxSDdiWG0xaFdRd2xWRUNTd2F0MWZZWk9FQmg1YlE=";
     if (typeof window !== "undefined" && typeof window.atob === "function") {
       return window.atob(b64);
     }
