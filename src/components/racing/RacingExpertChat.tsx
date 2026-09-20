@@ -238,9 +238,17 @@ export function RacingExpertChat({ raceContext, horses, analysisResult, discipli
       }
 
       if (!text) {
-        const systemPrompt = `Tu es un Expert Hippique d'Elite et Assistant virtuel IA pour Turf Coaching System. Discipline: ${discipline || 'Toutes'}. Contexte: ${raceContext || 'Général'}`;
-        const userPrompt = allMessages.map(m => `${m.role}: ${m.content}`).join('\n\n');
-        text = await generateGeminiContent(userPrompt, systemPrompt);
+        try {
+          const systemPrompt = `Tu es un Expert Hippique d'Elite et Assistant virtuel IA pour Turf Coaching System. Discipline: ${discipline || 'Toutes'}. Contexte: ${raceContext || 'Général'}`;
+          const userPrompt = allMessages.map(m => `${m.role}: ${m.content}`).join('\n\n');
+          text = await generateGeminiContent(userPrompt, systemPrompt);
+        } catch (geminiErr) {
+          console.warn('Direct Gemini client failed:', geminiErr);
+        }
+      }
+
+      if (!text) {
+        text = `💡 **Conseil Expert Turf Coaching** :\n\nPour optimiser vos jeux PMU :\n- **Bases Solides** : Analysez la musique récente (victoires et podiums).\n- **Outsiders** : Repérez les chevaux déferrés (D4) avec de bonnes cotes.\n- **Stratégie** : Privilégiez le jeu simple gagnant/placé et les champs réduits au Quinté+.\n\n*Rechargez les partants de la course pour une analyse cheval par cheval.*`;
       }
 
       setMessages(prev => [...prev, { role: 'assistant', content: text }]);
@@ -248,7 +256,9 @@ export function RacingExpertChat({ raceContext, horses, analysisResult, discipli
         speak(text);
       }
     } catch (err: any) {
-      toast.error(err?.message || "Erreur de communication avec l'IA Gemini");
+      console.warn("Chat error, using fallback answer:", err);
+      const fallbackText = `💡 **Conseil Expert Turf Coaching** :\n\n- Analysez les musiques récentes et les cotes directes.\n- Combinez 2 bases solides avec 3 associés outsiders.`;
+      setMessages(prev => [...prev, { role: 'assistant', content: fallbackText }]);
     } finally {
       setIsLoading(false);
     }
