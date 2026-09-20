@@ -37,20 +37,33 @@ export function PromoScrollBanner({ onClose }: PromoScrollBannerProps) {
 
   useEffect(() => {
     const loadSettings = async () => {
+      // 1. Check local storage first
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("promo_banner_settings_v1");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed.is_active ?? true) {
+              setSettings(parsed);
+              setIsLoading(false);
+            }
+          }
+        } catch {}
+      }
+
+      // 2. Check DB
       try {
         const { data, error } = await supabase
           .from("promo_banner_settings")
           .select("*")
-          .eq("is_active", true)
           .limit(1)
-          .single();
+          .maybeSingle();
 
-        if (error && error.code !== "PGRST116") {
-          console.error("Error loading promo settings:", error);
-        }
-
-        if (data) {
+        if (data && (data.is_active ?? true)) {
           setSettings(data);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("promo_banner_settings_v1", JSON.stringify(data));
+          }
         }
       } catch (error) {
         console.error("Error loading promo settings:", error);
@@ -62,6 +75,21 @@ export function PromoScrollBanner({ onClose }: PromoScrollBannerProps) {
     if (!isDismissed) {
       loadSettings();
     }
+
+    const handleUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && (customEvent.detail.is_active ?? true)) {
+        setSettings(customEvent.detail);
+        setIsLoading(false);
+      } else {
+        loadSettings();
+      }
+    };
+
+    window.addEventListener("promo_banner_updated", handleUpdate);
+    return () => {
+      window.removeEventListener("promo_banner_updated", handleUpdate);
+    };
   }, [isDismissed]);
 
   const handleClose = () => {

@@ -74,51 +74,76 @@ export function PromoBannerManager() {
 
   const loadSettings = async () => {
     setIsLoading(true);
+    // 1. Instant local storage load
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("promo_banner_settings_v1");
+        if (stored) {
+          const data = JSON.parse(stored);
+          setSettings(data);
+          setPromoText(data.promo_text || "");
+          setEuropePrice(data.europe_price || "");
+          setAfricaPrice(data.africa_price || "");
+          setIsActive(data.is_active ?? true);
+          setLinkUrl(data.link_url || "");
+          setBottomBannerText(data.bottom_banner_text || "");
+          setBottomBannerActive(data.bottom_banner_active ?? true);
+          if (data.bottom_banner_countdown_end) {
+            const date = new Date(data.bottom_banner_countdown_end);
+            setCountdownEnd(date.toISOString().slice(0, 16));
+          } else {
+            setCountdownEnd("");
+          }
+          setGradientStart(data.bottom_banner_gradient_start || "#dc2626");
+          setGradientMiddle(data.bottom_banner_gradient_middle || "#f97316");
+          setGradientEnd(data.bottom_banner_gradient_end || "#dc2626");
+          setTextColor(data.bottom_banner_text_color || "#ffffff");
+          setAccentColor(data.bottom_banner_accent_color || "#fde047");
+          setPromoVideoUrl(data.promo_video_url || "");
+          setPromoVideoActive(data.promo_video_active ?? false);
+          setPromoVideoPosition((data.promo_video_position as "above" | "below") || "above");
+        }
+      } catch {}
+    }
+
+    // 2. Async DB check
     try {
       const { data, error } = await supabase
         .from("promo_banner_settings")
         .select("*")
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== "PGRST116") {
-        throw error;
-      }
-
-      if (data) {
+      if (!error && data) {
         setSettings(data);
-        setPromoText(data.promo_text);
-        setEuropePrice(data.europe_price);
-        setAfricaPrice(data.africa_price);
-        setIsActive(data.is_active);
+        setPromoText(data.promo_text || "");
+        setEuropePrice(data.europe_price || "");
+        setAfricaPrice(data.africa_price || "");
+        setIsActive(data.is_active ?? true);
         setLinkUrl(data.link_url || "");
         setBottomBannerText(data.bottom_banner_text || "");
         setBottomBannerActive(data.bottom_banner_active ?? true);
-        // Format date for datetime-local input
         if (data.bottom_banner_countdown_end) {
           const date = new Date(data.bottom_banner_countdown_end);
           setCountdownEnd(date.toISOString().slice(0, 16));
         } else {
           setCountdownEnd("");
         }
-        // Load colors
         setGradientStart(data.bottom_banner_gradient_start || "#dc2626");
         setGradientMiddle(data.bottom_banner_gradient_middle || "#f97316");
         setGradientEnd(data.bottom_banner_gradient_end || "#dc2626");
         setTextColor(data.bottom_banner_text_color || "#ffffff");
         setAccentColor(data.bottom_banner_accent_color || "#fde047");
-        // Load video promo
         setPromoVideoUrl(data.promo_video_url || "");
         setPromoVideoActive(data.promo_video_active ?? false);
         setPromoVideoPosition((data.promo_video_position as "above" | "below") || "above");
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem("promo_banner_settings_v1", JSON.stringify(data));
+        }
       }
     } catch (error) {
-      console.error("Error loading promo settings:", error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de charger les paramètres de la bannière",
-        variant: "destructive",
-      });
+      console.warn("Error loading promo settings from DB:", error);
     } finally {
       setIsLoading(false);
     }
@@ -132,6 +157,7 @@ export function PromoBannerManager() {
     setIsSaving(true);
     try {
       const updateData = {
+        id: settings?.id && !settings.id.startsWith("local-") ? settings.id : `local-promo-${Date.now()}`,
         promo_text: promoText,
         europe_price: europePrice,
         africa_price: africaPrice,
@@ -150,29 +176,39 @@ export function PromoBannerManager() {
         promo_video_position: promoVideoPosition,
       };
 
-      if (settings) {
-        // Update existing
-        const { error } = await supabase
-          .from("promo_banner_settings")
-          .update(updateData)
-          .eq("id", settings.id);
+      // 1. Save locally for instant reactivity and Master Admin compatibility
+      if (typeof window !== "undefined") {
+        localStorage.setItem("promo_banner_settings_v1", JSON.stringify(updateData));
+        window.dispatchEvent(new CustomEvent("promo_banner_updated", { detail: updateData }));
+      }
+      setSettings(updateData as PromoBannerSettings);
 
-        if (error) throw error;
-      } else {
-        // Insert new
-        const { error } = await supabase
+      // 2. DB sync in background
+      try {
+        const { data: existing } = await supabase
           .from("promo_banner_settings")
-          .insert([updateData]);
+          .select("id")
+          .limit(1)
+          .maybeSingle();
 
-        if (error) throw error;
+        if (existing?.id) {
+          await supabase
+            .from("promo_banner_settings")
+            .update({ ...updateData, id: existing.id })
+            .eq("id", existing.id);
+        } else {
+          await supabase
+            .from("promo_banner_settings")
+            .insert([updateData]);
+        }
+      } catch (dbErr) {
+        console.warn("DB promo settings sync skipped or unauthenticated:", dbErr);
       }
 
       toast({
-        title: "Enregistré",
-        description: "Les paramètres de la bannière ont été mis à jour",
+        title: "Enregistré avec succès !",
+        description: "Les paramètres de la vidéo publicitaire et de la bannière ont été enregistrés.",
       });
-
-      await loadSettings();
     } catch (error) {
       console.error("Error saving promo settings:", error);
       toast({

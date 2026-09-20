@@ -107,9 +107,36 @@ export const AccessGate = ({ children }: AccessGateProps) => {
     }
   };
 
-  // Load bottom banner settings from database
+  // Load bottom banner & promo video settings
   useEffect(() => {
+    const applyData = (data: any) => {
+      if (!data) return;
+      if (data.bottom_banner_text) setBottomBannerText(data.bottom_banner_text);
+      if (data.bottom_banner_active !== undefined) setBottomBannerActive(data.bottom_banner_active);
+      if (data.link_url) setBannerLinkUrl(data.link_url);
+      if (data.bottom_banner_countdown_end !== undefined) setCountdownEnd(data.bottom_banner_countdown_end);
+      if (data.bottom_banner_gradient_start) setGradientStart(data.bottom_banner_gradient_start);
+      if (data.bottom_banner_gradient_middle) setGradientMiddle(data.bottom_banner_gradient_middle);
+      if (data.bottom_banner_gradient_end) setGradientEnd(data.bottom_banner_gradient_end);
+      if (data.bottom_banner_text_color) setTextColor(data.bottom_banner_text_color);
+      if (data.bottom_banner_accent_color) setAccentColor(data.bottom_banner_accent_color);
+      if (data.promo_video_url !== undefined) setPromoVideoUrl(data.promo_video_url || null);
+      if (data.promo_video_active !== undefined) setPromoVideoActive(data.promo_video_active);
+      if (data.promo_video_position) setPromoVideoPosition(data.promo_video_position as "above" | "below");
+    };
+
     const loadBannerSettings = async () => {
+      // 1. Check local storage first
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("promo_banner_settings_v1");
+          if (stored) {
+            applyData(JSON.parse(stored));
+          }
+        } catch {}
+      }
+
+      // 2. Fetch from DB
       try {
         const { data, error } = await supabase
           .from("promo_banner_settings")
@@ -117,23 +144,13 @@ export const AccessGate = ({ children }: AccessGateProps) => {
             "bottom_banner_text, bottom_banner_active, link_url, bottom_banner_countdown_end, bottom_banner_gradient_start, bottom_banner_gradient_middle, bottom_banner_gradient_end, bottom_banner_text_color, bottom_banner_accent_color, promo_video_url, promo_video_active, promo_video_position",
           )
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (!error && data) {
-          if (data.bottom_banner_text) setBottomBannerText(data.bottom_banner_text);
-          setBottomBannerActive(data.bottom_banner_active ?? true);
-          if (data.link_url) setBannerLinkUrl(data.link_url);
-          if (data.bottom_banner_countdown_end) setCountdownEnd(data.bottom_banner_countdown_end);
-          // Load colors
-          if (data.bottom_banner_gradient_start) setGradientStart(data.bottom_banner_gradient_start);
-          if (data.bottom_banner_gradient_middle) setGradientMiddle(data.bottom_banner_gradient_middle);
-          if (data.bottom_banner_gradient_end) setGradientEnd(data.bottom_banner_gradient_end);
-          if (data.bottom_banner_text_color) setTextColor(data.bottom_banner_text_color);
-          if (data.bottom_banner_accent_color) setAccentColor(data.bottom_banner_accent_color);
-          // Load video promo settings
-          setPromoVideoUrl(data.promo_video_url || null);
-          setPromoVideoActive(data.promo_video_active ?? false);
-          setPromoVideoPosition((data.promo_video_position as "above" | "below") || "above");
+          applyData(data);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("promo_banner_settings_v1", JSON.stringify(data));
+          }
         }
       } catch (err) {
         console.error("Error loading banner settings:", err);
@@ -141,6 +158,20 @@ export const AccessGate = ({ children }: AccessGateProps) => {
     };
 
     loadBannerSettings();
+
+    const handleUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        applyData(customEvent.detail);
+      } else {
+        loadBannerSettings();
+      }
+    };
+
+    window.addEventListener("promo_banner_updated", handleUpdate);
+    return () => {
+      window.removeEventListener("promo_banner_updated", handleUpdate);
+    };
   }, []);
 
   // Countdown timer logic
