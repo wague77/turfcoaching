@@ -1,4 +1,4 @@
-import { GEMINI_API_KEY } from './env';
+import { getGeminiApiKey } from './env';
 
 const MODELS = [
   'gemini-2.5-flash',
@@ -21,10 +21,10 @@ export async function generateGeminiContent(
   options?: GeminiOptions
 ): Promise<string> {
   const model = MODELS[modelIndex] || MODELS[0];
-  const apiKey = GEMINI_API_KEY;
+  const apiKey = getGeminiApiKey();
 
   if (!apiKey) {
-    throw new Error("Clé API Gemini absente. Veuillez vérifier VITE_GEMINI_API_KEY ou GEMINI_API_KEY dans vos variables d'environnement.");
+    throw new Error("Clé API Gemini absente. Veuillez vérifier GEMINI_API_KEY dans vos variables d'environnement.");
   }
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
