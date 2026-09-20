@@ -93,35 +93,81 @@ export interface PMUResultsResponse {
 }
 
 export async function fetchPMUData(date: string, reunion: number, course: number): Promise<PMUResponse> {
-  // Get the stored access code from sessionStorage
-  const accessCode = sessionStorage.getItem('racing_access_code') || '';
+  const accessCode = typeof window !== 'undefined' ? (sessionStorage.getItem('racing_access_code') || '') : '';
   
-  const { data, error } = await supabase.functions.invoke('fetch-pmu-data', {
-    body: { date, reunion, course, accessCode },
-  });
+  try {
+    const resp = await fetch('/api/pmu/fetch-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, reunion, course, accessCode }),
+    });
 
-  if (error) {
-    console.error('Error calling fetch-pmu-data:', error);
-    return { success: false, error: error.message };
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.success || data.horses) {
+        return data as PMUResponse;
+      }
+      if (data.error) {
+        return { success: false, error: data.error };
+      }
+    }
+  } catch (err) {
+    console.warn('Native API /api/pmu/fetch-data error, attempting Supabase fallback', err);
   }
 
-  return data as PMUResponse;
+  // Edge Function fallback if present
+  try {
+    const { data, error } = await supabase.functions.invoke('fetch-pmu-data', {
+      body: { date, reunion, course, accessCode },
+    });
+
+    if (!error && data) {
+      return data as PMUResponse;
+    }
+  } catch (err) {
+    console.error('Error calling fetch-pmu-data:', err);
+  }
+
+  return { success: false, error: 'Impossible d\'importer la course. Veuillez vérifier la réunion et la course.' };
 }
 
 export async function fetchPMUResults(date: string, reunion: number, course: number): Promise<PMUResultsResponse> {
-  // Get the stored access code from sessionStorage
-  const accessCode = sessionStorage.getItem('racing_access_code') || '';
+  const accessCode = typeof window !== 'undefined' ? (sessionStorage.getItem('racing_access_code') || '') : '';
   
-  const { data, error } = await supabase.functions.invoke('fetch-pmu-results', {
-    body: { date, reunion, course, accessCode },
-  });
+  try {
+    const resp = await fetch('/api/pmu/fetch-results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, reunion, course, accessCode }),
+    });
 
-  if (error) {
-    console.error('Error calling fetch-pmu-results:', error);
-    return { success: false, error: error.message };
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.success || data.results) {
+        return data as PMUResultsResponse;
+      }
+      if (data.error) {
+        return { success: false, error: data.error, notFinished: data.notFinished };
+      }
+    }
+  } catch (err) {
+    console.warn('Native API /api/pmu/fetch-results error, attempting Supabase fallback', err);
   }
 
-  return data as PMUResultsResponse;
+  // Edge Function fallback if present
+  try {
+    const { data, error } = await supabase.functions.invoke('fetch-pmu-results', {
+      body: { date, reunion, course, accessCode },
+    });
+
+    if (!error && data) {
+      return data as PMUResultsResponse;
+    }
+  } catch (err) {
+    console.error('Error calling fetch-pmu-results:', err);
+  }
+
+  return { success: false, error: 'Impossible de récupérer les résultats de la course.' };
 }
 
 // Convert PMU horses to the input format expected by the racing logic
