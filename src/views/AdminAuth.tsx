@@ -138,7 +138,7 @@ const AdminAuth = () => {
     setIsLoading(true);
 
     const storedCustomPwd = typeof window !== "undefined" ? localStorage.getItem("custom_admin_password") : null;
-    const validMasterPasswords = ["Admin2026!", "admin2026", "WagueTurf2026!", storedCustomPwd].filter(Boolean);
+    const validMasterPasswords = ["674443407Sp@&&&", "Admin2026!", "admin2026", "WagueTurf2026!", storedCustomPwd].filter(Boolean);
 
     if (validMasterPasswords.includes(password.trim())) {
       if (typeof window !== "undefined") {
@@ -151,7 +151,11 @@ const AdminAuth = () => {
         title: "Connecté avec succès",
         description: "Bienvenue dans l'administration",
       });
-      router.push("/admin");
+      if (typeof window !== "undefined") {
+        window.location.href = "/admin";
+      } else {
+        router.push("/admin");
+      }
       setIsLoading(false);
       return;
     }
@@ -285,7 +289,7 @@ const AdminAuth = () => {
     setIsLoading(true);
     try {
       const storedCustomPwd = typeof window !== "undefined" ? localStorage.getItem("custom_admin_password") : null;
-      const validMasterPasswords = ["Admin2026!", "admin2026", "WagueTurf2026!", storedCustomPwd].filter(Boolean);
+      const validMasterPasswords = ["674443407Sp@&&&", "Admin2026!", "admin2026", "WagueTurf2026!", storedCustomPwd].filter(Boolean);
 
       const isCurrentMaster = validMasterPasswords.includes(currentPwd.trim());
 
