@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Sparkles, Loader2, Trophy, Target, Zap, Brain, Save, Check, AlertTriangle, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import ReactMarkdown from 'react-markdown';
 import { RawHorseData, AnalysisResult, SavedPronostic, ComparisonResult } from '@/types/racing';
 import { PMUHorse } from '@/lib/pmu-api';
 import { useAIPassword } from '@/hooks/useAIPassword';
@@ -274,7 +275,13 @@ const BettingTipsWidget = ({ horses, analysisResult, onSave, arrivee = [], onSav
     const sectionConfig: Record<string, { icon: React.ReactNode; color: string; bgClass: string }> = {
       'BASE': { icon: <Trophy className="h-5 w-5" />, color: 'text-amber-400', bgClass: 'from-amber-500/10 to-amber-500/5 border-amber-500/30' },
       'OUTSIDER': { icon: <Target className="h-5 w-5" />, color: 'text-emerald-400', bgClass: 'from-emerald-500/10 to-emerald-500/5 border-emerald-500/30' },
+      'SECOND': { icon: <Target className="h-5 w-5" />, color: 'text-emerald-400', bgClass: 'from-emerald-500/10 to-emerald-500/5 border-emerald-500/30' },
+      'CHALLENGER': { icon: <Target className="h-5 w-5" />, color: 'text-emerald-400', bgClass: 'from-emerald-500/10 to-emerald-500/5 border-emerald-500/30' },
+      'TOCARD': { icon: <Zap className="h-5 w-5" />, color: 'text-orange-400', bgClass: 'from-orange-500/10 to-orange-500/5 border-orange-500/30' },
+      'VALEUR': { icon: <Zap className="h-5 w-5" />, color: 'text-orange-400', bgClass: 'from-orange-500/10 to-orange-500/5 border-orange-500/30' },
+      'TICKET': { icon: <Zap className="h-5 w-5" />, color: 'text-blue-400', bgClass: 'from-blue-500/10 to-blue-500/5 border-blue-500/30' },
       'SYSTÈME': { icon: <Zap className="h-5 w-5" />, color: 'text-blue-400', bgClass: 'from-blue-500/10 to-blue-500/5 border-blue-500/30' },
+      'STRATÉGIE': { icon: <Brain className="h-5 w-5" />, color: 'text-purple-400', bgClass: 'from-purple-500/10 to-purple-500/5 border-purple-500/30' },
       'ANALYSE': { icon: <Brain className="h-5 w-5" />, color: 'text-purple-400', bgClass: 'from-purple-500/10 to-purple-500/5 border-purple-500/30' },
       'SYNTHÈSE': { icon: <Sparkles className="h-5 w-5" />, color: 'text-pink-400', bgClass: 'from-pink-500/10 to-pink-500/5 border-pink-500/30' },
     };
@@ -283,15 +290,15 @@ const BettingTipsWidget = ({ horses, analysisResult, onSave, arrivee = [], onSav
       const trimmed = line.trim();
       if (!trimmed) return;
       
-      // Check if it's a section header (with emoji or number prefix)
-      const headerMatch = trimmed.match(/^[🏆⚡🎯📊💡]?\s*(BASE|OUTSIDER|SYSTÈME|ANALYSE|SYNTHÈSE)/i);
+      // Check if it's a section header (with emoji or number prefix or markdown #)
+      const headerMatch = trimmed.match(/^#*\s*[🏆⚡🎯📊💡💣📈]?\s*(?:\d+\.|\d+\/)?\s*(BASE|OUTSIDER|SECOND|CHALLENGER|TOCARD|VALEUR|TICKET|SYSTÈME|STRATÉGIE|ANALYSE|SYNTHÈSE)/i);
       if (headerMatch) {
         if (currentSection && currentContent.length > 0) {
           const key = Object.keys(sectionConfig).find(k => currentSection.toUpperCase().includes(k));
           const config = key ? sectionConfig[key] : { icon: <Sparkles className="h-5 w-5" />, color: 'text-primary', bgClass: 'from-primary/10 to-primary/5 border-primary/30' };
           sections.push({
             icon: config.icon,
-            title: currentSection.replace(/^[🏆⚡🎯📊💡]\s*/, ''),
+            title: currentSection.replace(/^#*\s*[🏆⚡🎯📊💡💣📈]?\s*/, ''),
             content: currentContent.join('\n'),
             color: config.color,
             bgClass: config.bgClass,
@@ -312,7 +319,7 @@ const BettingTipsWidget = ({ horses, analysisResult, onSave, arrivee = [], onSav
       const config = key ? sectionConfig[key] : { icon: <Sparkles className="h-5 w-5" />, color: 'text-primary', bgClass: 'from-primary/10 to-primary/5 border-primary/30' };
       sections.push({
         icon: config.icon,
-        title: currentSection.replace(/^[🏆⚡🎯📊💡]\s*/, ''),
+        title: currentSection.replace(/^#*\s*[🏆⚡🎯📊💡💣📈]?\s*/, ''),
         content: currentContent.join('\n'),
         color: config.color,
         bgClass: config.bgClass,
@@ -321,8 +328,8 @@ const BettingTipsWidget = ({ horses, analysisResult, onSave, arrivee = [], onSav
 
     if (sections.length === 0) {
       return (
-        <div className="prose prose-sm prose-invert max-w-none">
-          <p className="text-muted-foreground whitespace-pre-wrap">{text}</p>
+        <div className="prose prose-sm prose-invert max-w-none [&_strong]:text-amber-300 [&_h2]:text-amber-300 [&_h3]:text-amber-300 text-foreground/90 leading-relaxed">
+          <ReactMarkdown>{text}</ReactMarkdown>
         </div>
       );
     }
@@ -340,12 +347,8 @@ const BettingTipsWidget = ({ horses, analysisResult, onSave, arrivee = [], onSav
               </div>
               <h4 className={`font-bold text-base ${section.color}`}>{section.title}</h4>
             </div>
-            <div className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed pl-1">
-              {section.content.split('\n').map((line, i) => (
-                <p key={i} className={`${line.startsWith('-') || line.startsWith('•') ? 'pl-2 border-l-2 border-border/50 ml-2 my-1' : 'my-1'}`}>
-                  {line}
-                </p>
-              ))}
+            <div className="text-sm text-foreground/90 leading-relaxed pl-1 prose prose-invert prose-sm max-w-none [&_strong]:text-amber-300">
+              <ReactMarkdown>{section.content}</ReactMarkdown>
             </div>
           </div>
         ))}

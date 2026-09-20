@@ -981,8 +981,8 @@ export function TurfCoachingApp() {
         </CardContent>
       </Card>
       
-      {/* Results */}
-      {hasActiveFilters && (
+      {/* Results - Always show generated combinations */}
+      {filteredCombinations.length > 0 && (
         <ResultsDisplay
           combinations={filteredCombinations}
           horses={horses}
