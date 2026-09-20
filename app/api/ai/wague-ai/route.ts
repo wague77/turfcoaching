@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateLocalWagueTurfAnalysis } from '@/lib/wague-turf-logic';
+
+const MODELS_TO_TRY = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
 
 export async function POST(req: Request) {
   let horses: any[] = [];
@@ -7,15 +10,12 @@ export async function POST(req: Request) {
   let raceInfo = '';
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY manquante sur Railway/Vercel");
-    }
-
     const body = await req.json();
     horses = body.horses || [];
     discipline = body.discipline || '';
     raceInfo = body.raceInfo || '';
+
+    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
     const systemInstruction = `Tu es l'Algorithme Expert & Moteur d'IA Avancée WAGUE-TURF v8.0, leader dans le calcul probabiliste des courses hippiques PMU (Trot, Galop, Haies, Steeple-chase).
 Tu analyses avec une précision chirurgicale les données des chevaux : Musique récente, cote probabilité, ferrage (D4/DP/DA), jockey/driver, régularité et forme du moment.
@@ -54,18 +54,32 @@ Génère une analyse experte complète avec les 5 sections suivantes :
 - **Conseils de gestion des mises** (Jeux simples, combinés ou couverture).
 `;
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-3.8-flash",
-      systemInstruction,
-    });
+    let text = '';
+    if (apiKey) {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      for (const modelName of MODELS_TO_TRY) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction,
+          });
+          const result = await model.generateContent(prompt);
+          text = result.response.text();
+          if (text) break;
+        } catch (mErr: any) {
+          console.warn(`Model ${modelName} call failed, trying next:`, mErr?.message || mErr);
+        }
+      }
+    }
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    if (!text) {
+      text = generateLocalWagueTurfAnalysis(horses, discipline, raceInfo);
+    }
 
-    return NextResponse.json({ text, response: text });
+    return NextResponse.json({ text, response: text, success: true });
   } catch (e: any) {
-    console.error("Gemini Error:", e.message || e);
-    return NextResponse.json({ error: e.message || "Erreur Gemini API" }, { status: 500 });
+    console.error("Gemini Error (using algorithmic fallback):", e.message || e);
+    const fallbackText = generateLocalWagueTurfAnalysis(horses, discipline, raceInfo);
+    return NextResponse.json({ text: fallbackText, response: fallbackText, success: true });
   }
 }

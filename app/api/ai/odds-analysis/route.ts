@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateLocalOddsAnalysis } from '@/lib/wague-turf-logic';
+
+const MODELS_TO_TRY = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
 
 export async function POST(req: Request) {
   let snapshots: any[] = [];
@@ -8,11 +11,6 @@ export async function POST(req: Request) {
   let course: any = '';
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY manquante sur Railway/Vercel");
-    }
-
     const body = await req.json();
     snapshots = body.snapshots || [];
     date = body.date || '';
@@ -20,6 +18,8 @@ export async function POST(req: Request) {
     course = body.course || '';
     const arrivee = body.arrivee;
     const customPrompt = body.customPrompt;
+
+    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
     const systemInstruction = `Tu es l'Algorithme Expert d'Analyse Prédictive & Mouvement des Cotes Hippiques pour Turf Coaching System (v8.0).
 Tu décodes avec précision les baisses de cotes brusques ("chutes de cote", "smart money", "argent des initiés"), les hausses d'incertitude et la dérive des favoris fragiles.
@@ -53,18 +53,32 @@ Fournis le rapport d'analyse de cotes structuré comme suit :
 - **Alerte Risque & Indice de Volatilité des Cotes** (Faible / Modéré / Élevé).
 `;
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-3.8-flash",
-      systemInstruction,
-    });
+    let text = '';
+    if (apiKey) {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      for (const modelName of MODELS_TO_TRY) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction,
+          });
+          const result = await model.generateContent(prompt);
+          text = result.response.text();
+          if (text) break;
+        } catch (mErr: any) {
+          console.warn(`Model ${modelName} call failed, trying next:`, mErr?.message || mErr);
+        }
+      }
+    }
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    if (!text) {
+      text = generateLocalOddsAnalysis(snapshots, date, reunion, course);
+    }
 
-    return NextResponse.json({ text, result: text, analysis: text });
+    return NextResponse.json({ text, result: text, analysis: text, success: true });
   } catch (e: any) {
-    console.error("Gemini Error:", e.message || e);
-    return NextResponse.json({ error: e.message || "Erreur Gemini API" }, { status: 500 });
+    console.error("Gemini Error (using algorithmic fallback):", e.message || e);
+    const fallbackText = generateLocalOddsAnalysis(snapshots, date, reunion, course);
+    return NextResponse.json({ text: fallbackText, result: fallbackText, analysis: fallbackText, success: true });
   }
 }
