@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server';
-import { generateGeminiContent } from '@/lib/gemini';
-import { generateLocalWagueTurfAnalysis } from '@/lib/wague-turf-logic';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: Request) {
   let horses: any[] = [];
   let discipline = '';
   let raceInfo = '';
-  
+
   try {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY manquante sur Railway/Vercel");
+    }
+
     const body = await req.json();
     horses = body.horses || [];
     discipline = body.discipline || '';
@@ -50,16 +54,18 @@ Génère une analyse experte complète avec les 5 sections suivantes :
 - **Conseils de gestion des mises** (Jeux simples, combinés ou couverture).
 `;
 
-    const text = await generateGeminiContent(prompt, systemInstruction, 0, {
-      temperature: 0.65,
-      maxTokens: 3500,
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3.8-flash",
+      systemInstruction,
     });
 
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+
     return NextResponse.json({ text, response: text });
-  } catch (error: any) {
-    console.warn('Wague Turf AI Route Error (using algorithmic fallback):', error?.message || error);
-    const fallbackText = generateLocalWagueTurfAnalysis(horses, discipline, raceInfo);
-    return NextResponse.json({ text: fallbackText, response: fallbackText });
+  } catch (e: any) {
+    console.error("Gemini Error:", e.message || e);
+    return NextResponse.json({ error: e.message || "Erreur Gemini API" }, { status: 500 });
   }
 }
-

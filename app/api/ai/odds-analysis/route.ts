@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generateGeminiContent } from '@/lib/gemini';
-import { generateLocalOddsAnalysis } from '@/lib/wague-turf-logic';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: Request) {
   let snapshots: any[] = [];
@@ -9,6 +8,11 @@ export async function POST(req: Request) {
   let course: any = '';
 
   try {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY manquante sur Railway/Vercel");
+    }
+
     const body = await req.json();
     snapshots = body.snapshots || [];
     date = body.date || '';
@@ -18,7 +22,7 @@ export async function POST(req: Request) {
     const customPrompt = body.customPrompt;
 
     const systemInstruction = `Tu es l'Algorithme Expert d'Analyse Prédictive & Mouvement des Cotes Hippiques pour Turf Coaching System (v8.0).
-Tu décodes avec précision les baisses de cotes brusques ("chutes de cote", "smart money", "argent des initiés"), les hausses d'incertitude et la dérive des favoris fragile.
+Tu décodes avec précision les baisses de cotes brusques ("chutes de cote", "smart money", "argent des initiés"), les hausses d'incertitude et la dérive des favoris fragiles.
 Ta mission est d'éclairer les parieurs sur l'argent réel placé sur chaque cheval.
 
 Règles de présentation :
@@ -49,16 +53,18 @@ Fournis le rapport d'analyse de cotes structuré comme suit :
 - **Alerte Risque & Indice de Volatilité des Cotes** (Faible / Modéré / Élevé).
 `;
 
-    const text = await generateGeminiContent(prompt, systemInstruction, 0, {
-      temperature: 0.6,
-      maxTokens: 3500,
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3.8-flash",
+      systemInstruction,
     });
 
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+
     return NextResponse.json({ text, result: text, analysis: text });
-  } catch (error: any) {
-    console.warn('Gemini Odds Analysis Route Error (using algorithmic fallback):', error?.message || error);
-    const fallbackText = generateLocalOddsAnalysis(snapshots, date, reunion, course);
-    return NextResponse.json({ text: fallbackText, result: fallbackText, analysis: fallbackText });
+  } catch (e: any) {
+    console.error("Gemini Error:", e.message || e);
+    return NextResponse.json({ error: e.message || "Erreur Gemini API" }, { status: 500 });
   }
 }
-

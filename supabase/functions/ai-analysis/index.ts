@@ -196,7 +196,7 @@ Donne-moi:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model: 'gemini-3.8-flash',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -226,7 +226,7 @@ Donne-moi:
     return new Response(JSON.stringify({ 
       success: true,
       analysis,
-      model: 'google/gemini-3-flash-preview'
+      model: 'gemini-3.8-flash'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

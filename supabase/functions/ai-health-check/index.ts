@@ -15,7 +15,7 @@ const FUNCTIONS = [
   { name: "ai-analysis", label: "Analyse IA générale" },
 ];
 
-const MODEL = "google/gemini-3-flash-preview";
+const MODEL = "gemini-3.8-flash";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

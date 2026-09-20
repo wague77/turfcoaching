@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
-import { generateGeminiContent } from '@/lib/gemini';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: Request) {
   let lastUserMsg = 'Analyse PMU';
   try {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY manquante sur Railway/Vercel");
+    }
+
     const { messages, raceContext, discipline } = await req.json();
     if (Array.isArray(messages) && messages.length > 0) {
       lastUserMsg = messages[messages.length - 1]?.content || 'Analyse PMU';
@@ -13,7 +18,7 @@ export async function POST(req: Request) {
 Tu réponds en Français parfait de manière fluide, claire, motivante, structurée et vivante avec des émojis adaptés.
 Tu maîtrises parfaitement :
 - La lecture et le décodage de la musique des chevaux (ex: 1p 3p (23) 2a Dm 4p).
-- L'impact de la ferrage (Déferré des 4 - D4, Déferré des antérieurs - DA, Déferré des postérieurs - DP).
+- L'impact du ferrage (Déferré des 4 - D4, Déferré des antérieurs - DA, Déferré des postérieurs - DP).
 - Les tactiques des jockeys / drivers et le profil des entraineurs.
 - L'analyse des cotes, des chutes de cotes, et la gestion du bankroll / gestion des mises (Kelly criterion, flat betting).
 - La configuration des pistes (Terrain lourd, bon, très souple, autostart vs volt).
@@ -29,26 +34,18 @@ Sois toujours précis, donne des conseils concrets et évite les réponses vague
 
     const prompt = `Voici l'historique complet de la discussion :\n${formattedConversation}\n\nRéponds au dernier message de l'utilisateur avec la plus haute expertise technique et hippique.`;
 
-    const text = await generateGeminiContent(prompt, systemInstruction, 0, {
-      temperature: 0.7,
-      maxTokens: 3000,
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3.8-flash",
+      systemInstruction,
     });
 
-    return NextResponse.json({ reply: text, content: text });
-  } catch (error: any) {
-    console.warn('Gemini Chat Route Error (using fallback expert response):', error?.message || error);
-    
-    const fallbackReply = `💡 **Conseil Expert Turf Coaching** :
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
 
-Pour réussir vos paris hippiques sur la question "${lastUserMsg.slice(0, 100)}" :
-1. **Bases Solides** : Privilégiez les chevaux affichant des victoires récentes (musique avec des 1p, 1a, 2p) et drivés par des jockeys du top 5.
-2. **Gestion des Cotes** : Surveillez les chevaux dont la cote chute brutalement 15 à 30 minutes avant le départ ("Smart Money").
-3. **Optimisation** : Combinez 2 bases en jeu simple ou couplé avec 3 outsiders à fort potentiel en Champ Réduit.
-
-*Importez les partants de votre course pour obtenir une analyse ciblée cheval par cheval.*`;
-
-    return NextResponse.json({ reply: fallbackReply, content: fallbackReply });
+    return NextResponse.json({ reply: responseText, content: responseText });
+  } catch (e: any) {
+    console.error("Gemini Error:", e.message || e);
+    return NextResponse.json({ error: e.message || "Erreur Gemini API" }, { status: 500 });
   }
 }
-
-
