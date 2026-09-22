@@ -191,13 +191,6 @@ export function RacingExpertChat({ raceContext, horses, analysisResult, discipli
   const hasRaceData = horses && horses.length > 0;
 
   const streamChat = async (userMessage: string) => {
-    // Check password authentication first
-    if (!isAuthenticated) {
-      setPendingMessage(userMessage);
-      setShowPasswordDialog(true);
-      return;
-    }
-    
     // Create a new conversation if none is active
     if (!activeConversationId) {
       createConversation();

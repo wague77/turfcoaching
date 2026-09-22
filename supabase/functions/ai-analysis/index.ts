@@ -136,12 +136,9 @@ serve(async (req) => {
       );
     }
 
-    const apiKey = Deno.env.get('LOVABLE_API_KEY');
-    const apiUrl = "https://ai.gateway.lovable.dev";
-    if (!apiKey) {
-      console.error('LOVABLE_API_KEY is not configured');
-      throw new Error('API key not configured');
-    }
+    // Try Gemini API directly with multiple model fallbacks
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('LOVABLE_API_KEY');
+    const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 
     // Build a structured prompt for race analysis
     const systemPrompt = `Tu es un expert en courses hippiques français. Tu analyses les données des courses et fournis des conseils stratégiques.
@@ -187,46 +184,58 @@ Donne-moi:
 4. Un outsider à surveiller
 5. Une suggestion de jeu (Tiercé/Quarté/Quinté+)`;
 
-    console.log('Calling OpenRouter API...');
-    
-    const response = await fetch(`${apiUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gemini-3.8-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: 1000,
-        temperature: 0.7,
-      }),
-    });
+    console.log('Calling Gemini API directly...');
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ success: false, error: "Limite de requêtes atteinte, réessayez plus tard." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errorText = await response.text();
-      console.error('OpenRouter API error:', response.status, errorText);
-      throw new Error(`API error: ${response.status}`);
+    let analysis = 'Analyse non disponible';
+    let usedModel = '';
+
+    if (!geminiApiKey) {
+      console.error('No Gemini API key configured (GEMINI_API_KEY or LOVABLE_API_KEY)');
+      throw new Error('API key not configured');
     }
 
-    const data = await response.json();
-    console.log('OpenRouter response received');
-    
-    const analysis = data.choices?.[0]?.message?.content || 'Analyse non disponible';
+    for (const modelName of GEMINI_MODELS) {
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
+        const geminiBody = {
+          contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1000 },
+        };
+        const response = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(geminiBody),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            analysis = text;
+            usedModel = modelName;
+            break;
+          }
+        } else {
+          const errText = await response.text();
+          console.warn(`Gemini model ${modelName} failed (${response.status}): ${errText}`);
+          if (response.status === 429) {
+            return new Response(
+              JSON.stringify({ success: false, error: "Limite de requêtes atteinte, réessayez plus tard." }),
+              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        }
+      } catch (modelErr) {
+        console.warn(`Gemini model ${modelName} error:`, modelErr);
+      }
+    }
+
+    console.log(`Gemini response received (model: ${usedModel || 'fallback'})`);
+
 
     return new Response(JSON.stringify({ 
       success: true,
       analysis,
-      model: 'gemini-3.8-flash'
+      model: usedModel || 'gemini-2.5-flash'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

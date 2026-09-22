@@ -39,8 +39,8 @@ function getBrowserName(): string {
 }
 
 export function useAIPassword() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isBlocked, setIsBlocked] = useState<boolean>(false);
 
   useEffect(() => {
@@ -48,20 +48,7 @@ export function useAIPassword() {
   }, []);
 
   const checkSession = () => {
-    const storedToken = sessionStorage.getItem(AI_SESSION_TOKEN_KEY);
-    const expiry = sessionStorage.getItem(AI_PASSWORD_EXPIRY_KEY);
-    
-    if (storedToken && expiry) {
-      const expiryDate = new Date(expiry);
-      if (expiryDate > new Date()) {
-        setIsAuthenticated(true);
-      } else {
-        // Session expired, clear storage
-        sessionStorage.removeItem(AI_SESSION_TOKEN_KEY);
-        sessionStorage.removeItem(AI_PASSWORD_EXPIRY_KEY);
-        setIsAuthenticated(false);
-      }
-    }
+    setIsAuthenticated(true);
     setIsLoading(false);
   };
 

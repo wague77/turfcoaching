@@ -15,7 +15,7 @@ const FUNCTIONS = [
   { name: "ai-analysis", label: "Analyse IA générale" },
 ];
 
-const MODEL = "gemini-3.8-flash";
+const MODEL = "gemini-2.5-flash";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

@@ -101,9 +101,18 @@ export function generateLocalWagueTurfAnalysis(
   discipline?: string,
   raceInfo?: string
 ): string {
-  const analyzed = Array.isArray(horses) && horses.length > 0
-    ? (horses[0]?.noteDetails ? (horses as WagueTurfHorse[]) : analyzeRace(horses).horses)
-    : [];
+  let analyzed: WagueTurfHorse[] = [];
+  try {
+    if (Array.isArray(horses) && horses.length > 0) {
+      if (horses[0]?.noteDetails) {
+        analyzed = horses as WagueTurfHorse[];
+      } else {
+        analyzed = analyzeWagueTurf(horses as PMUHorse[]).horses;
+      }
+    }
+  } catch (err) {
+    console.warn("Erreur lors de l'analyse dans generateLocalWagueTurfAnalysis:", err);
+  }
 
   const bases = analyzed.filter(h => h.category === 'base' || h.note >= 65).slice(0, 3);
   const challengers = analyzed.filter(h => h.category === 'outsider' || (h.note >= 45 && h.note < 65)).slice(0, 3);

@@ -39,17 +39,6 @@ const BettingTipsWidget = ({ horses, analysisResult, onSave, arrivee = [], onSav
   const { isAuthenticated, getSessionToken, getDeviceId } = useAIPassword();
 
   const generateTips = async () => {
-    if (!horses || horses.length === 0) {
-      toast.error('Veuillez d\'abord charger des données de course');
-      return;
-    }
-
-    // Check if user is authenticated for AI
-    if (!isAuthenticated) {
-      setShowPasswordDialog(true);
-      return;
-    }
-
     performGenerateTips();
   };
 
@@ -68,8 +57,30 @@ const BettingTipsWidget = ({ horses, analysisResult, onSave, arrivee = [], onSav
     setIsLoading(true);
     setError(null);
     try {
-      const { generateLocalWagueTurfAnalysis } = await import('@/lib/wague-turf-logic');
-      const analysisText = generateLocalWagueTurfAnalysis(targetHorses, 'Trot / Galop / PMU', 'Système de Jeu IA Expert');
+      let analysisText = '';
+      try {
+        const resp = await fetch('/api/ai/wague-ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            horses: targetHorses,
+            discipline: 'Trot / Galop / PMU',
+            raceInfo: 'Système de Jeu IA Expert - Paris Hippiques',
+          }),
+        });
+
+        if (resp.ok) {
+          const data = await resp.json();
+          analysisText = data.text || data.response || '';
+        }
+      } catch (apiErr) {
+        console.warn('Route native /api/ai/wague-ai indisponible, génération locale:', apiErr);
+      }
+
+      if (!analysisText) {
+        const { generateLocalWagueTurfAnalysis } = await import('@/lib/wague-turf-logic');
+        analysisText = generateLocalWagueTurfAnalysis(targetHorses, 'Trot / Galop / PMU', 'Système de Jeu IA Expert');
+      }
 
       setTips(analysisText);
       setError(null);
@@ -559,7 +570,7 @@ const BettingTipsWidget = ({ horses, analysisResult, onSave, arrivee = [], onSav
                     if (tips && !isSaved) {
                       onSave({
                         raceName: raceName.trim() || undefined,
-                        horseCount: horses.length,
+                        horseCount: (horses && horses.length) || 8,
                         tips,
                         analysisResult,
                       });

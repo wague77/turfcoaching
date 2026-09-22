@@ -424,13 +424,8 @@ const OddsEvolutionTab = () => {
       return;
     }
 
-    if (!isAIAuthenticated) {
-      setShowAIPasswordDialog(true);
-      return;
-    }
-
     runAIAnalysis();
-  }, [currentHistory, isAIAuthenticated, runAIAnalysis]);
+  }, [currentHistory, runAIAnalysis]);
 
   // Export to Excel function
   const exportToExcel = useCallback(() => {
